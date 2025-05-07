@@ -14,7 +14,7 @@ if ($conn->connect_error) {
 }
 
 // Fetch the most recent transaction
-$sql = "SELECT phone, package, checkout_id, time 
+$sql = "SELECT phone, package, checkout_id 
         FROM clients 
         ORDER BY time DESC 
         LIMIT 1";
