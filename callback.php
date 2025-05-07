@@ -6,10 +6,10 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 // Database credentials
-$host = 'localhost';
-$user = 'root';
-$password = '';
-$dbname = 'mpesatest';
+$host = 'sql5.freesqldatabase.com';
+$user = 'sql5777359';
+$password = 'YQ8SA8yu2p';
+$dbname = 'sql5777359';
 
 $conn = new mysqli($host, $user, $password, $dbname);
 if ($conn->connect_error) {

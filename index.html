@@ -247,7 +247,7 @@
     loading.style.display = 'block';
     subscribeBtn.disabled = true;
 
-    fetch('https://9fdf-102-135-174-108.ngrok-free.app/mpesatest/stk_push.php', {
+    fetch('https://mpesatest-mk71.onrender.com/stk_push.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, amount: selectedAmount })
@@ -258,7 +258,7 @@
       const maxAttempts = 10;
       const intervalId = setInterval(() => {
         attempts++;
-        fetch(`https://9fdf-102-135-174-108.ngrok-free.app/mpesatest/check_payment.php?phone=${phone}&amount=${selectedAmount}`)
+        fetch(`https://mpesatest-mk71.onrender.com/check_payment.php?phone=${phone}&amount=${selectedAmount}`)
           .then(res => res.json())
           .then(data => {
             if (data.success) {

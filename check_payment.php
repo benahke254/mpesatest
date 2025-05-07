@@ -2,10 +2,10 @@
 // check_payment.php
 
 // Database connection details
-$host = 'localhost';
-$user = 'root';
-$password = '';
-$dbname = 'mpesatest';
+$host = 'sql5.freesqldatabase.com';
+$user = 'sql5777359';
+$password = 'YQ8SA8yu2p';
+$dbname = 'sql5777359';
 
 // Connect to MySQL database
 $conn = new mysqli($host, $user, $password, $dbname);

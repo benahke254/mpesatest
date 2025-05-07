@@ -1,9 +1,9 @@
 <?php
 // Database credentials
-$host = 'sql209.ezyro.com';
-$user = 'ezyro_38918922';
-$password = 'b8e341b';
-$dbname = 'ezyro_38918922_mpesatest';
+$host = 'sql5.freesqldatabase.com';
+$user = 'sql5777359';
+$password = 'YQ8SA8yu2p';
+$dbname = 'sql5777359';
 
 // Create a connection
 $conn = new mysqli($host, $user, $password, $dbname);
