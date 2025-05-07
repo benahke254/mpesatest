@@ -32,7 +32,7 @@ $shortcode = '174379';
 $consumerKey = 'FcrA6bZbGZfm7XGOsuQGMGQQlnNpYUSVuohKN4cbUBOhr7ml';
 $consumerSecret = 'p30cG1LMM8AzGptCtk8MdtZrSY9R7KQ17r7ibaU6Q2X7n1XG4ijoWsFH7e8J9BkJ';
 $passkey = 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919';
-$callbackUrl = 'https://quickcoinconnect.unaux.com/callback.php'; // Your callback.php URL
+$callbackUrl = 'https://mpesatest-mk71.onrender.com/callback.php'; // Your callback.php URL
 
 // Generate timestamp
 $timestamp = date('YmdHis');
