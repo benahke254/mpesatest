@@ -18,8 +18,16 @@ if (empty($phone) || empty($package)) {
     exit;
 }
 
-// === Format phone number ===
-$phone = preg_replace('/^0/', '254', $phone);
+// === Format phone number to 2547XXXXXXXX ===
+$phone = preg_replace('/\D/', '', $phone); // remove non-digits
+if (preg_match('/^0(\d{9})$/', $phone, $matches)) {
+    $phone = '254' . $matches[1];
+} elseif (preg_match('/^254\d{9}$/', $phone)) {
+    // already in correct format
+} else {
+    echo json_encode(['status' => 'error', 'message' => 'Invalid phone number format']);
+    exit;
+}
 
 // === Generate unique checkout ID ===
 $checkout_id = uniqid('cc_', true);
@@ -51,6 +59,11 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: Basic ' . $credentials]);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 $token_response = curl_exec($ch);
 $token_http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+if (curl_errno($ch)) {
+    echo json_encode(['status' => 'error', 'message' => 'cURL error (token): ' . curl_error($ch)]);
+    curl_close($ch);
+    exit;
+}
 curl_close($ch);
 
 $token_data = json_decode($token_response);
@@ -75,7 +88,7 @@ $payload = [
     'Password' => $password,
     'Timestamp' => $timestamp,
     'TransactionType' => 'CustomerPayBillOnline',
-    'Amount' => 1,
+    'Amount' => 1, // You can dynamically set this later
     'PartyA' => $phone,
     'PartyB' => $shortcode,
     'PhoneNumber' => $phone,
@@ -95,6 +108,11 @@ curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
 $stk_response = curl_exec($ch);
 $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+if (curl_errno($ch)) {
+    echo json_encode(['status' => 'error', 'message' => 'cURL error (STK): ' . curl_error($ch)]);
+    curl_close($ch);
+    exit;
+}
 curl_close($ch);
 
 // === Handle errors ===
