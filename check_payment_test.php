@@ -14,9 +14,9 @@ if ($conn->connect_error) {
 }
 
 // Fetch the most recent transaction
-$sql = "SELECT phone, package, checkout_id 
+$sql = "SELECT phone, package, checkout_id, purchase_time 
         FROM clients 
-        ORDER BY time DESC 
+        ORDER BY purchase_time DESC 
         LIMIT 1";
 
 $result = $conn->query($sql);
@@ -28,7 +28,7 @@ if ($result && $result->num_rows > 0) {
     echo "<strong>Phone:</strong> " . htmlspecialchars($row['phone']) . "<br>";
     echo "<strong>Package:</strong> " . htmlspecialchars($row['package']) . "<br>";
     echo "<strong>Checkout ID:</strong> " . htmlspecialchars($row['checkout_id']) . "<br>";
-    echo "<strong>Time:</strong> " . htmlspecialchars($row['time']) . "<br>";
+    echo "<strong>Purchase Time:</strong> " . htmlspecialchars($row['purchase_time']) . "<br>";
 } else {
     echo "❌ No recent payment found.";
 }
