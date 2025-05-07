@@ -201,93 +201,109 @@
     <input type="hidden" name="popup" value="true" />
   </form>
 
-<script>
-  const packages = document.querySelectorAll('.package');
-  const modal = document.getElementById('modal');
-  const modalContent = document.querySelector('.modal-content');
-  const closeModal = document.getElementById('closeModal');
-  const loading = document.getElementById('loading');
-  const success = document.getElementById('success');
-  const phoneInput = document.getElementById('phoneNumber');
-  const subscribeBtn = document.getElementById('subscribeBtn');
-  let selectedAmount = 0;
-
-  packages.forEach(pkg => {
-    pkg.addEventListener('click', () => {
-      selectedAmount = parseInt(pkg.dataset.amount);
-      phoneInput.value = '';
-      modal.style.display = 'flex';
-      loading.style.display = 'none';
-      success.style.display = 'none';
-      subscribeBtn.disabled = false;
+  <script>
+    const packages = document.querySelectorAll('.package');
+    const modal = document.getElementById('modal');
+    const modalContent = document.querySelector('.modal-content');
+    const closeModal = document.getElementById('closeModal');
+    const loading = document.getElementById('loading');
+    const success = document.getElementById('success');
+    const phoneInput = document.getElementById('phoneNumber');
+    const subscribeBtn = document.getElementById('subscribeBtn');
+    let selectedAmount = 0;
+  
+    packages.forEach(pkg => {
+      pkg.addEventListener('click', () => {
+        selectedAmount = parseInt(pkg.dataset.amount);
+        phoneInput.value = '';
+        modal.style.display = 'flex';
+        loading.style.display = 'none';
+        success.style.display = 'none';
+        subscribeBtn.disabled = false;
+      });
     });
-  });
-
-  modal.addEventListener('click', (e) => {
-    if (!modalContent.contains(e.target)) {
+  
+    modal.addEventListener('click', (e) => {
+      if (!modalContent.contains(e.target)) {
+        modal.style.display = 'none';
+      }
+    });
+  
+    closeModal.addEventListener('click', () => {
       modal.style.display = 'none';
-    }
-  });
-
-  closeModal.addEventListener('click', () => {
-    modal.style.display = 'none';
-  });
-
-  subscribeBtn.addEventListener('click', () => {
-    let phone = phoneInput.value.trim();
-    if (!phone || !selectedAmount) {
-      alert("Enter phone and select a package!");
-      return;
-    }
-
-    if (phone.startsWith("07") || phone.startsWith("01")) {
-      phone = "254" + phone.slice(1);
-    }
-
-    loading.style.display = 'block';
-    subscribeBtn.disabled = true;
-
-    fetch('https://mpesatest-mk71.onrender.com/stk_push.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, amount: selectedAmount })
-    })
-    .then(res => res.json())
-    .then(res => {
-      let attempts = 0;
-      const maxAttempts = 10;
-      const intervalId = setInterval(() => {
-        attempts++;
-        fetch(`https://mpesatest-mk71.onrender.com/check_payment.php?phone=${phone}&amount=${selectedAmount}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              clearInterval(intervalId);
-              loading.style.display = 'none';
-              success.style.display = 'block';
-
-              document.getElementById('login-username').value = data.username;
-              document.getElementById('login-password').value = data.password;
-
-              setTimeout(() => {
-                document.getElementById('loginForm').submit();
-              }, 2000);
-            } else if (attempts >= maxAttempts) {
-              clearInterval(intervalId);
-              loading.style.display = 'none';
-              alert("Payment not detected. Try again.");
-              modal.style.display = 'none';
-            }
-          });
-      }, 3000);
-    })
-    .catch(err => {
-      console.error(err);
-      alert("Failed to send STK Push. Try again.");
-      loading.style.display = 'none';
-      subscribeBtn.disabled = false;
     });
-  });
-</script>
+  
+    subscribeBtn.addEventListener('click', () => {
+      let phone = phoneInput.value.trim();
+      if (!phone || !selectedAmount) {
+        alert("Enter phone and select a package!");
+        return;
+      }
+  
+      // Convert to international format if needed
+      if (phone.startsWith("07") || phone.startsWith("01")) {
+        phone = "254" + phone.slice(1);
+      }
+  
+      loading.style.display = 'block';
+      subscribeBtn.disabled = true;
+  
+      // Send STK push
+      fetch('https://mpesatest-mk71.onrender.com/stk_push.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, amount: selectedAmount })
+      })
+      .then(res => res.json())
+      .then(res => {
+        if (!res.success || !res.receipt) {
+          throw new Error("STK Push failed or no receipt returned");
+        }
+  
+        const receipt = res.receipt;
+        let attempts = 0;
+        const maxAttempts = 10;
+  
+        const intervalId = setInterval(() => {
+          attempts++;
+  
+          fetch(`https://mpesatest-mk71.onrender.com/check_payment.php?phone=${phone}&receipt=${receipt}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.status === "success") {
+                clearInterval(intervalId);
+                loading.style.display = 'none';
+                success.style.display = 'block';
+  
+                // Auto-login if needed
+                document.getElementById('login-username').value = phone;
+                document.getElementById('login-password').value = phone;
+  
+                setTimeout(() => {
+                  document.getElementById('loginForm').submit();
+                }, 2000);
+              } else if (attempts >= maxAttempts) {
+                clearInterval(intervalId);
+                loading.style.display = 'none';
+                alert("Payment not detected. Try again.");
+                modal.style.display = 'none';
+              }
+            })
+            .catch(err => {
+              clearInterval(intervalId);
+              loading.style.display = 'none';
+              alert("Error checking payment. Try again.");
+              console.error(err);
+            });
+        }, 3000);
+      })
+      .catch(err => {
+        console.error(err);
+        alert("Failed to send STK Push. Try again.");
+        loading.style.display = 'none';
+        subscribeBtn.disabled = false;
+      });
+    });
+  </script>  
 </body>
 </html>

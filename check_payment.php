@@ -15,17 +15,18 @@ if ($conn->connect_error) {
     die(json_encode(["status" => "error", "message" => "Database Connection Failed"]));
 }
 
-// Get phone number from AJAX request
+// Get phone and mpesa_receipt from AJAX request
 $phone = isset($_GET['phone']) ? $_GET['phone'] : '';
+$mpesa_receipt = isset($_GET['receipt']) ? $_GET['receipt'] : '';
 
-if (empty($phone)) {
-    echo json_encode(["status" => "error", "message" => "Phone number missing"]);
+if (empty($phone) || empty($mpesa_receipt)) {
+    echo json_encode(["status" => "error", "message" => "Phone or receipt number missing"]);
     exit();
 }
 
-// Search for payment by phone number
-$stmt = $conn->prepare("SELECT * FROM clients WHERE phone = ? ORDER BY id DESC LIMIT 1");
-$stmt->bind_param("s", $phone);
+// Search for payment by phone number and receipt
+$stmt = $conn->prepare("SELECT * FROM clients WHERE phone = ? AND mpesa_receipt = ? ORDER BY id DESC LIMIT 1");
+$stmt->bind_param("ss", $phone, $mpesa_receipt);
 $stmt->execute();
 $result = $stmt->get_result();
 
@@ -41,7 +42,7 @@ if ($result->num_rows > 0) {
         "name" => $row['name']
     ]);
 } else {
-    // No payment found
+    // No matching payment found
     echo json_encode(["status" => "pending"]);
 }
 
