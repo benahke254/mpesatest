@@ -1,123 +1,105 @@
 <?php
-header('Content-Type: application/json');
+// Allow any origin to access this resource
+header("Access-Control-Allow-Origin: *");  // This allows all origins; you can replace '*' with specific domains like 'https://example.com' for more security
 
-// Include DB connection
-require_once 'db.php';
+// Allow specific methods (e.g., GET, POST)
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 
-// Safaricom credentials
-$consumerKey = 'FcrA6bZbGZfm7XGOsuQGMGQQlnNpYUSVuohKN4cbUBOhr7ml';
-$consumerSecret = 'p30cG1LMM8AzGptCtk8MdtZrSY9R7KQ17r7ibaU6Q2X7n1XG4ijoWsFH7e8J9BkJ';
-$shortCode = '174379';
-$passkey = 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919';
-$callbackUrl = 'https://mpesatest-mk71.onrender.com/callback.php';
+// Allow specific headers (e.g., Content-Type, Authorization)
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
-// Get user input
+// If it's a preflight request (OPTIONS request), return 200 status without any processing
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    // Stop further processing
+    http_response_code(200);
+    exit();
+}
+
+// Read raw POST data
 $data = json_decode(file_get_contents('php://input'), true);
-$phone = $data['phone'];
-$package = $data['package'];
 
 // Validate input
-if (!$phone || !$package) {
-    echo json_encode(['status' => 'error', 'message' => 'Phone number and package are required']);
+if (!isset($data['phone']) || !isset($data['amount'])) {
+    echo json_encode(['success' => false, 'message' => 'Invalid input']);
     exit;
 }
 
-// Format phone number
-if (substr($phone, 0, 1) === '0') {
-    $phone = '254' . substr($phone, 1);
-} elseif (substr($phone, 0, 3) === '254') {
-    $phone = $phone;
-} else {
-    echo json_encode(['status' => 'error', 'message' => 'Invalid phone number format']);
-    exit;
-}
+$phone = $data['phone'];
+$amount = $data['amount'];
 
-// Get access token
+// M-Pesa credentials (from your provided details)
+$shortcode = '174379';
+$consumerKey = 'FcrA6bZbGZfm7XGOsuQGMGQQlnNpYUSVuohKN4cbUBOhr7ml';
+$consumerSecret = 'p30cG1LMM8AzGptCtk8MdtZrSY9R7KQ17r7ibaU6Q2X7n1XG4ijoWsFH7e8J9BkJ';
+$passkey = 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919';
+$callbackUrl = 'https://mpesatest-mk71.onrender.com/callback.php'; // Your callback.php URL
+
+// Generate timestamp
+$timestamp = date('YmdHis');
+
+// Generate password
+$password = base64_encode($shortcode . $passkey . $timestamp);
+
+// Request access token
 $credentials = base64_encode("$consumerKey:$consumerSecret");
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials');
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    "Authorization: Basic $credentials"
-]);
+$token_url = 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+
+$ch = curl_init($token_url);
+curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: Basic ' . $credentials]);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 $response = curl_exec($ch);
 curl_close($ch);
 
-$accessToken = json_decode($response)->access_token ?? null;
-if (!$accessToken) {
-    echo json_encode(['status' => 'error', 'message' => 'Failed to generate access token']);
+$result = json_decode($response, true);
+if (!isset($result['access_token'])) {
+    echo json_encode(['success' => false, 'message' => 'Failed to generate access token']);
     exit;
 }
 
-// STK push
-$timestamp = date('YmdHis');
-$password = base64_encode($shortCode . $passkey . $timestamp);
-
-// Map package to amount
-$amount = 0;
-switch ($package) {
-    case 'Daily - Ksh10':
-        $amount = 10;
-        break;
-    case 'Weekly - Ksh50':
-        $amount = 50;
-        break;
-    case 'Monthly - Ksh200':
-        $amount = 200;
-        break;
-    default:
-        echo json_encode(['status' => 'error', 'message' => 'Invalid package selected']);
-        exit;
-}
-
-// Generate unique checkout_id
-$checkout_id = uniqid('tx_', true);
+$checkout_id = uniqid('cc_', true); // Generate unique checkout ID
+$package = $_POST['package']; // Example: "500MB"
+$phone = $_POST['phone']; // Must be in 2547xxxxxxx format
 
 // Save to pendingpayments
 $stmt = $conn->prepare("INSERT INTO pendingpayments (phone, package, checkout_id) VALUES (?, ?, ?)");
-if (!$stmt) {
-    echo json_encode(['status' => 'error', 'message' => 'Database prepare failed: ' . $conn->error]);
-    exit;
-}
 $stmt->bind_param("sss", $phone, $package, $checkout_id);
-if (!$stmt->execute()) {
-    echo json_encode(['status' => 'error', 'message' => 'Failed to save pending payment: ' . $stmt->error]);
-    exit;
-}
-$stmt->close();
+$stmt->execute();
 
-// Initiate STK Push
-$ch = curl_init('https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest');
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    "Authorization: Bearer $accessToken",
-    'Content-Type: application/json'
-]);
 
-$payload = json_encode([
-    'BusinessShortCode' => $shortCode,
+$access_token = $result['access_token'];
+
+// Prepare STK Push request
+$stkPushUrl = 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest';
+$payload = [
+    'BusinessShortCode' => $shortcode,
     'Password' => $password,
     'Timestamp' => $timestamp,
     'TransactionType' => 'CustomerPayBillOnline',
     'Amount' => $amount,
     'PartyA' => $phone,
-    'PartyB' => $shortCode,
+    'PartyB' => $shortcode,
     'PhoneNumber' => $phone,
     'CallBackURL' => $callbackUrl,
-    'AccountReference' => $package,
-    'TransactionDesc' => "Hotspot payment for $package"
+    'AccountReference' => 'QuickCoin',
+    'TransactionDesc' => 'Hotspot Payment'
+];
+
+$ch = curl_init($stkPushUrl);
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    'Content-Type: application/json',
+    'Authorization: Bearer ' . $access_token
 ]);
-
 curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-$result = curl_exec($ch);
-$err = curl_error($ch);
+$response = curl_exec($ch);
 curl_close($ch);
 
-if ($err) {
-    echo json_encode(['status' => 'error', 'message' => 'cURL error: ' . $err]);
+$result = json_decode($response, true);
+
+if (isset($result['ResponseCode']) && $result['ResponseCode'] == '0') {
+    echo json_encode(['success' => true, 'message' => 'STK Push Sent']);
 } else {
-    echo json_encode(['status' => 'success', 'message' => 'STK push initiated', 'checkout_id' => $checkout_id]);
+    echo json_encode(['success' => false, 'message' => 'Failed to initiate STK Push']);
 }
 ?>

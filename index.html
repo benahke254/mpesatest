@@ -234,76 +234,60 @@
   });
 
   subscribeBtn.addEventListener('click', () => {
-  let phone = phoneInput.value.trim();
-  if (!phone || !selectedAmount) {
-    alert("Enter phone and select a package!");
-    return;
-  }
-
-  if (phone.startsWith("07") || phone.startsWith("01")) {
-    phone = "254" + phone.slice(1);
-  }
-
-  loading.style.display = 'block';
-  subscribeBtn.disabled = true;
-
-  fetch('https://mpesatest-mk71.onrender.com/stk_push.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, amount: selectedAmount })
-  })
-  .then(res => res.json())
-  .then(res => {
-    if (!res.checkout_id) {
-      alert("Failed to initiate payment.");
-      loading.style.display = 'none';
-      subscribeBtn.disabled = false;
+    let phone = phoneInput.value.trim();
+    if (!phone || !selectedAmount) {
+      alert("Enter phone and select a package!");
       return;
     }
 
-    const checkoutId = res.checkout_id;
-    let attempts = 0;
-    const maxAttempts = 10;
+    if (phone.startsWith("07") || phone.startsWith("01")) {
+      phone = "254" + phone.slice(1);
+    }
 
-    const intervalId = setInterval(() => {
-      attempts++;
-      fetch(`https://mpesatest-mk71.onrender.com/check_payment.php?checkout_id=${checkoutId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            clearInterval(intervalId);
-            loading.style.display = 'none';
-            success.style.display = 'block';
+    loading.style.display = 'block';
+    subscribeBtn.disabled = true;
 
-            document.getElementById('login-username').value = data.username;
-            document.getElementById('login-password').value = data.password;
+    fetch('https://mpesatest-mk71.onrender.com/stk_push.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, amount: selectedAmount })
+    })
+    .then(res => res.json())
+    .then(res => {
+      let attempts = 0;
+      const maxAttempts = 10;
+      const intervalId = setInterval(() => {
+        attempts++;
+        fetch(`https://mpesatest-mk71.onrender.com/check_payment.php?phone=${phone}&amount=${selectedAmount}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              clearInterval(intervalId);
+              loading.style.display = 'none';
+              success.style.display = 'block';
 
-            setTimeout(() => {
-              document.getElementById('loginForm').submit();
-            }, 2000);
-          } else if (attempts >= maxAttempts) {
-            clearInterval(intervalId);
-            loading.style.display = 'none';
-            alert("Payment verification timed out. Please try again or contact support.");
-            subscribeBtn.disabled = false;
-          }
-        })
-        .catch(err => {
-          console.error("Polling error:", err);
-          clearInterval(intervalId);
-          loading.style.display = 'none';
-          alert("An error occurred while checking payment.");
-          subscribeBtn.disabled = false;
-        });
-    }, 3000); // Poll every 3 seconds
-  })
-  .catch(err => {
-    console.error("STK push error:", err);
-    loading.style.display = 'none';
-    alert("Failed to initiate STK Push.");
-    subscribeBtn.disabled = false;
+              document.getElementById('login-username').value = data.username;
+              document.getElementById('login-password').value = data.password;
+
+              setTimeout(() => {
+                document.getElementById('loginForm').submit();
+              }, 2000);
+            } else if (attempts >= maxAttempts) {
+              clearInterval(intervalId);
+              loading.style.display = 'none';
+              alert("Payment not detected. Try again.");
+              modal.style.display = 'none';
+            }
+          });
+      }, 3000);
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Failed to send STK Push. Try again.");
+      loading.style.display = 'none';
+      subscribeBtn.disabled = false;
+    });
   });
-});
 </script>
 </body>
 </html>

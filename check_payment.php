@@ -1,47 +1,51 @@
 <?php
 // check_payment.php
 
-require_once 'db.php';
+// Database connection details
+$host = 'sql5.freesqldatabase.com';
+$user = 'sql5777359';
+$password = 'YQ8SA8yu2p';
+$dbname = 'sql5777359';
 
-// Get the checkout_id from the GET parameter
-$checkout_id = $_GET['checkout_id'] ?? '';
+// Connect to MySQL database
+$conn = new mysqli($host, $user, $password, $dbname);
 
-if (empty($checkout_id)) {
-    echo json_encode(["status" => "error", "message" => "Missing checkout_id"]);
+// Check connection
+if ($conn->connect_error) {
+    die(json_encode(["status" => "error", "message" => "Database Connection Failed"]));
+}
+
+// Get phone and mpesa_receipt from AJAX request
+$phone = isset($_GET['phone']) ? $_GET['phone'] : '';
+$mpesa_receipt = isset($_GET['receipt']) ? $_GET['receipt'] : '';
+
+if (empty($phone) || empty($mpesa_receipt)) {
+    echo json_encode(["status" => "error", "message" => "Phone or receipt number missing"]);
     exit();
 }
 
-// Check if the payment has been confirmed
-$stmt = $conn->prepare("SELECT * FROM clients WHERE checkout_id = ? LIMIT 1");
-$stmt->bind_param("s", $checkout_id);
+// Search for payment by phone number and receipt
+$stmt = $conn->prepare("SELECT * FROM clients WHERE phone = ? AND mpesa_receipt = ? ORDER BY id DESC LIMIT 1");
+$stmt->bind_param("ss", $phone, $mpesa_receipt);
 $stmt->execute();
 $result = $stmt->get_result();
 
 if ($result->num_rows > 0) {
+    // Payment found
     $row = $result->fetch_assoc();
 
-    // If the payment is confirmed, return client details
     echo json_encode([
         "status" => "success",
-        "name" => $row['name'],
-        "phone" => $row['phone'],
         "package" => $row['package'],
         "purchase_time" => $row['purchase_time'],
-        "mpesa_receipt" => $row['mpesa_receipt']
+        "mpesa_receipt" => $row['mpesa_receipt'],
+        "name" => $row['name']
     ]);
 } else {
-    // If no entry is found in clients, check pending payments
-    $stmt_pending = $conn->prepare("SELECT * FROM pendingpayments WHERE checkout_id = ? AND status = 'pending' LIMIT 1");
-    $stmt_pending->bind_param("s", $checkout_id);
-    $stmt_pending->execute();
-    $pending_result = $stmt_pending->get_result();
-
-    if ($pending_result->num_rows > 0) {
-        // Payment is still pending
-        echo json_encode(["status" => "pending"]);
-    } else {
-        // If no pending payment is found
-        echo json_encode(["status" => "error", "message" => "Payment not found or already processed"]);
-    }
+    // No matching payment found
+    echo json_encode(["status" => "pending"]);
 }
+
+$stmt->close();
+$conn->close();
 ?>

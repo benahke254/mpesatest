@@ -1,60 +1,80 @@
 <?php
+file_put_contents('callback_log.txt', json_encode($_POST), FILE_APPEND);
+
 // callback.php
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
 
-require_once 'db.php';
+// Database credentials
+$host = 'sql5.freesqldatabase.com';
+$user = 'sql5777359';
+$password = 'YQ8SA8yu2p';
+$dbname = 'sql5777359';
 
-// Get callback JSON from Safaricom
+$conn = new mysqli($host, $user, $password, $dbname);
+if ($conn->connect_error) {
+    file_put_contents('callback_log.txt', "DB ERROR: " . $conn->connect_error . PHP_EOL, FILE_APPEND);
+    die("Database Connection Failed: " . $conn->connect_error);
+}
+
+// Confirm POST request
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    file_put_contents('callback_log.txt', "Invalid method: " . $_SERVER['REQUEST_METHOD'] . PHP_EOL, FILE_APPEND);
+    echo json_encode(["ResultDesc" => "Invalid method", "ResultCode" => 1]);
+    exit;
+}
+
+// Get raw POST data
 $callbackJSON = file_get_contents('php://input');
+file_put_contents('callback_log.txt', "Raw JSON: $callbackJSON" . PHP_EOL, FILE_APPEND);
+
+// Decode JSON
 $callbackData = json_decode($callbackJSON, true);
+if ($callbackData === null) {
+    file_put_contents('callback_log.txt', "ERROR: Invalid JSON received." . PHP_EOL, FILE_APPEND);
+    echo json_encode(["ResultDesc" => "Invalid JSON", "ResultCode" => 1]);
+    exit;
+}
 
-// Log the full callback for debugging
-file_put_contents('callback_log.txt', $callbackJSON . PHP_EOL, FILE_APPEND);
+// Check for ResultCode
+if (isset($callbackData['Body']['stkCallback']['ResultCode'])) {
+    $resultCode = $callbackData['Body']['stkCallback']['ResultCode'];
+    if ($resultCode == 0) {
+        // Extract values safely
+        $meta = $callbackData['Body']['stkCallback']['CallbackMetadata']['Item'];
+        $checkoutRequestID = $callbackData['Body']['stkCallback']['CheckoutRequestID'] ?? '';
+        $amount = $meta[0]['Value'] ?? '';
+        $mpesaReceipt = $meta[1]['Value'] ?? '';
+        $phone = $meta[4]['Value'] ?? '';
 
-// Extract CheckoutRequestID
-$checkoutRequestID = $callbackData['Body']['stkCallback']['CheckoutRequestID'] ?? null;
-$metadataItems = $callbackData['Body']['stkCallback']['CallbackMetadata']['Item'] ?? [];
+        if ($amount && $mpesaReceipt && $phone && $checkoutRequestID) {
+            $name = "Client";
+            $package = $amount . "MB";
+            $purchase_time = date('Y-m-d H:i:s');
 
-$mpesaReceipt = '';
-foreach ($metadataItems as $item) {
-    if ($item['Name'] === 'MpesaReceiptNumber') {
-        $mpesaReceipt = $item['Value'];
-        break;
+            $stmt = $conn->prepare("INSERT INTO clients (name, phone, package, purchase_time, checkout_id, mpesa_receipt) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssss", $name, $phone, $package, $purchase_time, $checkoutRequestID, $mpesaReceipt);
+
+            if ($stmt->execute()) {
+                file_put_contents('callback_log.txt', "✅ Payment inserted: $mpesaReceipt" . PHP_EOL, FILE_APPEND);
+                echo json_encode(["ResultDesc" => "Success", "ResultCode" => 0]);
+            } else {
+                file_put_contents('callback_log.txt', "❌ DB Insert Error: " . $stmt->error . PHP_EOL, FILE_APPEND);
+                echo json_encode(["ResultDesc" => "Insert failed", "ResultCode" => 1]);
+            }
+            $stmt->close();
+        } else {
+            file_put_contents('callback_log.txt', "❌ Missing values in metadata." . PHP_EOL, FILE_APPEND);
+            echo json_encode(["ResultDesc" => "Missing metadata", "ResultCode" => 1]);
+        }
+    } else {
+        file_put_contents('callback_log.txt', "⚠️ Payment not successful. ResultCode: $resultCode" . PHP_EOL, FILE_APPEND);
+        echo json_encode(["ResultDesc" => "Payment failed", "ResultCode" => 0]);
     }
-}
-
-// Validate necessary data
-if (!$checkoutRequestID || !$mpesaReceipt) {
-    file_put_contents('callback_log.txt', "❌ Missing CheckoutRequestID or MpesaReceiptNumber" . PHP_EOL, FILE_APPEND);
-    echo json_encode(['ResultCode' => 1, 'ResultDesc' => 'Missing data']);
-    exit();
-}
-
-// Check if payment exists and is still pending
-$stmt = $conn->prepare("SELECT * FROM pendingpayments WHERE checkout_id = ? AND status = 'pending' LIMIT 1");
-$stmt->bind_param("s", $checkoutRequestID);
-$stmt->execute();
-$result = $stmt->get_result();
-
-if ($result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $phone = $row['phone'];
-    $package = $row['package'];
-    $purchase_time = date('Y-m-d H:i:s');
-    $name = 'Client';
-
-    // Insert into clients table
-    $insert = $conn->prepare("INSERT INTO clients (name, phone, package, purchase_time, checkout_id, mpesa_receipt) VALUES (?, ?, ?, ?, ?, ?)");
-    $insert->bind_param("ssssss", $name, $phone, $package, $purchase_time, $checkoutRequestID, $mpesaReceipt);
-    $insert->execute();
-
-    // Mark pending payment as completed
-    $update = $conn->prepare("UPDATE pendingpayments SET status = 'completed' WHERE checkout_id = ?");
-    $update->bind_param("s", $checkoutRequestID);
-    $update->execute();
-
-    echo json_encode(["ResultDesc" => "Success", "ResultCode" => 0]);
 } else {
-    file_put_contents('callback_log.txt', "❌ CheckoutID not found or already processed: $checkoutRequestID" . PHP_EOL, FILE_APPEND);
-    echo json_encode(["ResultDesc" => "Not Found", "ResultCode" => 1]);
+    file_put_contents('callback_log.txt', "❌ Missing ResultCode in callback." . PHP_EOL, FILE_APPEND);
+    echo json_encode(["ResultDesc" => "Invalid callback", "ResultCode" => 1]);
 }
+
+$conn->close();
 ?>
